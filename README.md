@@ -12,17 +12,23 @@
 |------|---------|
 | PHP | 8.0 或更高（推荐 8.2） |
 | MySQL | 5.7+ 或 MariaDB 10.3+ |
-| Web 服务器 | Nginx / Apache（需支持 URL 重写） |
+| Web 服务器 | Nginx / Apache（支持 PHP 即可，开启 URL 重写体验更佳） |
 | PHP 扩展 | PDO、PDO_MySQL、JSON、GD、mbstring（`fileinfo` 可选） |
+
+> Chitchat 现在同时支持两种访问方式：
+> 1. **伪静态模式**：服务器已正确配置重写时，地址可保持简洁。
+> 2. **兼容模式**：即使服务器没有开启 URL 重写，系统也会自动回退到 `index.php?route=...` 形式，内部链接仍可正常访问。
 
 ### 安装步骤
 
 1. **上传文件**  
-   将整个 `chitchat/` 目录上传到服务器的 Web 根目录（如 `/var/www/html/`）。
+   将整个 `chitchat/` 目录上传到服务器。既可以放在站点根目录，也可以放在子目录（例如 `/chitchatbbs`）。
 
 2. **配置 Web 服务器**
-   - **Apache**: 确保根目录的 `.htaccess` 可用，开启 `mod_rewrite`，Web 根目录直接指向 `chitchat/`
-   - **Nginx**: 参考 `nginx.conf.example` 配置，`root` 设为 `chitchat/` 目录
+   - **根目录部署**：Web 根目录直接指向 `chitchat/`。
+   - **子目录部署**：例如论坛最终访问地址是 `http://your-domain.com/chitchatbbs`，请确保 Web 服务器实际指向该目录，并在安装向导中把 `base_url` 填成 `/chitchatbbs`。
+   - **Apache**：确保允许读取根目录 `.htaccess`。如果启用了 `mod_rewrite`，建议在 `.htaccess` 中按实际子目录补上 `RewriteBase /chitchatbbs/`（根目录部署无需添加）。
+   - **Nginx**：如果论坛运行在子目录，`try_files` 的回退路径必须指向子目录入口，例如 `/chitchatbbs/index.php?$query_string`，不能写成站点根入口 `/index.php?$query_string`。
 
 3. **设置目录权限**
    ```bash
@@ -31,16 +37,58 @@
    ```
 
 4. **访问安装向导**  
-   在浏览器中打开：`http://your-domain.com/install/`
+   - 根目录部署：`http://your-domain.com/install/`
+   - 子目录部署：`http://your-domain.com/chitchatbbs/install/`
 
 5. **跟随安装向导完成配置**
    - 环境检查
    - 数据库连接配置
    - 论坛名称和管理员账号设置
+   - 如果论坛安装在子目录，请正确填写 `base_url`（例如 `/chitchatbbs`）
    - 一键安装
 
 6. **开始使用！**  
    安装完成后自动跳转论坛首页 🎉
+
+### 子目录部署与 404 排查
+
+如果首页能打开，但点击任意讨论、用户、后台菜单后都变成 404，通常是下面两类原因：
+
+1. **服务器重写规则没有生效**
+   - Apache 没有开启 `mod_rewrite`
+   - `AllowOverride` 被禁用，导致 `.htaccess` 没有生效
+   - Nginx 的 `try_files` 没有把请求回退到当前子目录的 `index.php`
+
+2. **安装时 `base_url` 填错或留空**
+   - 根目录安装可留空
+   - 子目录安装必须填写类似 `/chitchatbbs`
+
+**Apache 子目录部署示例**（论坛位于 `/chitchatbbs`）：
+
+```apache
+RewriteEngine On
+RewriteBase /chitchatbbs/
+
+RewriteRule ^(app|config|database|storage|install/install\.lock) - [F,L]
+RewriteRule \.(sql|lock|log|env|git|htaccess)$ - [F,L]
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^ index.php [L]
+```
+
+**Nginx 子目录部署示例**（论坛目录位于 `/var/www/html/chitchatbbs`）：
+
+```nginx
+location /chitchatbbs/ {
+    try_files $uri $uri/ /chitchatbbs/index.php?$query_string;
+}
+
+location /chitchatbbs/install/ {
+    try_files $uri $uri/ /chitchatbbs/install/index.php?$query_string;
+}
+```
+
+如果你的服务器暂时无法开启 URL 重写，也可以先安装并直接使用，Chitchat 会自动生成兼容模式链接，不会再因为内部跳转全部走伪静态而整站 404。
 
 ---
 
@@ -114,7 +162,7 @@ chitchat/
 
 ### 用户系统
 - ✅ 注册 / 登录（支持 Remember Me）
-- ✅ 头像（自定义上传 / Gravatar 后备，支持 1:1 裁剪）
+- ✅ 头像（自定义上传 / Gravatar 后备）
 - ✅ 个人主页（帖子统计、最近讨论）
 - ✅ 账号设置（头像、个人简介、密码修改）
 - ✅ 用户组与权限管理
